@@ -101,9 +101,13 @@ ifeq ($(strip $(macosx)),true)
   	LDFLAGS += -framework Cocoa -framework OpenGL -framework IOKit -framework CoreFoundation -framework Carbon -framework OpenAL
   	LDFLAGS += ./libSDL-1.2.0.dylib ./libSDLmain-osx.a
 else
-	CXX := /opt/crosstool/gcc-4.1.2-glibc-2.3.6/i686-unknown-linux-gnu/i686-unknown-linux-gnu/bin/g++
-	CC := /opt/crosstool/gcc-4.1.2-glibc-2.3.6/i686-unknown-linux-gnu/i686-unknown-linux-gnu/bin/gcc
-	LD := /opt/crosstool/gcc-4.1.2-glibc-2.3.6/i686-unknown-linux-gnu/i686-unknown-linux-gnu/bin/g++
+	# CXX := /opt/crosstool/gcc-4.1.2-glibc-2.3.6/i686-unknown-linux-gnu/i686-unknown-linux-gnu/bin/g++
+	# CC := /opt/crosstool/gcc-4.1.2-glibc-2.3.6/i686-unknown-linux-gnu/i686-unknown-linux-gnu/bin/gcc
+	# LD := /opt/crosstool/gcc-4.1.2-glibc-2.3.6/i686-unknown-linux-gnu/i686-unknown-linux-gnu/bin/g++
+	# updated for build on Jetson TK1
+	CXX := g++
+	CC := gcc
+	LD := g++
 
   	CFLAGS += -DPLATFORM_LINUX=1
   	LDFLAGS += ./libSDL-1.2.so.0 -Wl,-rpath,\$$ORIGIN
