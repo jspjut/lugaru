@@ -1,6 +1,6 @@
 Thanks for downloading Lugaru!
 
-This source code is based on Mercurial revision 269 from http://code.google.com/p/lugaru/
+This source code is forked from Mercurial revision 269 from http://code.google.com/p/lugaru/
 
 Please note, the codebase is GPLv2 and is freely downloadable through Mercurial.
 
@@ -27,3 +27,7 @@ any other method.
 This source tree has been tested on 32-bit Windows as well as 32-bit and 64-bit Mac and Linux. 
 However, there are no guarantees whether it will work for you.Make sure you have the dependencies
 though. And of course, have fun!
+
+## Quickstart
+In the root directory run `cmake .` then run `make` then run `./lugaru
+--windowed` in case your graphics drivders aren't quite set right.
