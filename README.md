@@ -29,5 +29,6 @@ However, there are no guarantees whether it will work for you.Make sure you have
 though. And of course, have fun!
 
 ## Quickstart
+
 In the root directory run `cmake .` then run `make` then run `./lugaru
 --windowed` in case your graphics drivders aren't quite set right.
