@@ -19,29 +19,26 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
+#include "SDL.h"
+
 #include "gamegl.h"
 #include "Quaternions.h"
 #include "Lights.h"
 #include "Skeleton.h"
-#include "fmod.h"
 #include "Terrain.h"
 #include "Sprites.h"
-//#include <agl.h>
 #include "Frustum.h"
 #include "Objects.h"
 #include "Weapons.h"
 #include "Person.h"
 #include "TGALoader.h"
+#include "openal_wrapper.h"
 
 #include "Constants.h"
 
-#if USE_SDL
-#include "SDL.h"
-#endif
-
 bool visibleloading = 0;
-FSOUND_SAMPLE	*samp[100] = {0};
-FSOUND_STREAM * strm[20] = {0};
+OPENAL_SAMPLE	*samp[100] = {0};
+OPENAL_STREAM * strm[20] = {0};
 int channels[100] = {0};
 
 float volume = 0;bool buttons[3] = {0};
@@ -80,15 +77,9 @@ int numsounds = 0;
 Terrain terrain;
 Sprites sprites;
 float sps = 0;
-#ifdef WIN32
-HDC hDC;
-#elif USE_SDL
+
 SDL_Surface *sdlscreen;
-#elif PLATFORM_MACOSX
-AGLContext gaglContext;
-#else
-#error Define your platform.
-#endif
+
 int kTextureSize = 0;
 int detail = 0;
 FRUSTUM frustum;
@@ -124,8 +115,6 @@ int flashdelay = 0;
 bool vblsync = 0;
 float motionbluramount = 0;
 bool keyboardfrozen = 0;
-int newnetmessages = 0;
-char netmessages[256] = {0};
 char mapname[256] = {0};
 bool loadingstuff = 0;
 bool stillloading = 0;

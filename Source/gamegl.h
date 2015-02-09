@@ -30,32 +30,18 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <map>
 #include <string>
 
-#ifndef WIN32
-  #if PLATFORM_UNIX
-    #define GL_GLEXT_PROTOTYPES
-    #include "gl.h"
-    #include "glu.h"
-    #include "glext.h"
-  #else
-    #include <gl.h>
-    #include <glu.h>
-    #include <glext.h>
-  #endif
-#else
+#ifdef WIN32
   #define WIN32_LEAN_AND_MEAN
   #define Polygon WinPolygon
   #include <windows.h>
   #undef Polygon
-  #define GL_GLEXT_PROTOTYPES
-  #include <gl/gl.h>
-  #include <gl/glu.h>
-  #include <gl/glaux.h>
-  #include <gl/glext.h>
-  #include "MacCompatibility.h"
-  #include "il/ilut.h"
-
-  #define glDeleteTextures( a, b) glDeleteTextures( (a), (const unsigned int *)(b) );
 #endif
+
+#define GL_GLEXT_PROTOTYPES 1
+#include "GL/gl.h"
+#include "GL/glu.h"
+#include "GL/glext.h"
+#include "MacCompatibility.h"
 
 #if !PLATFORM_MACOSX
 struct RGBColor
@@ -70,7 +56,9 @@ typedef RGBColor * RGBColorPtr;
 
 using namespace std;
 
-#include "logger/logger.h"
+/* !!! FIXME: until we replace logger better. --ryan. */
+#define LOGFUNC
+void LOG(const std::string &fmt, ...);
 
 #endif
 

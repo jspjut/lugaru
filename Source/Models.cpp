@@ -19,9 +19,9 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
+#include "Game.h"
 #include "Models.h"
 //#include "altivec.h"
-#include "Game.h"
 
 extern float multiplier;
 extern float viewdistance;
@@ -31,7 +31,6 @@ extern float texdetail;
 extern bool decals;
 extern int loadscreencolor;
 
-#include "Game.h"
 extern Game * pgame;
 extern bool visibleloading;
 //Functions
@@ -437,7 +436,7 @@ bool Model::loadnotex(char *filename )
 	type=notextype;
 	color=0;
 
-	tfile=fopen( filename, "rb" );
+	tfile=fopen( ConvertFileName(filename), "rb" );
 	// read model settings
 
 	fseek(tfile, 0, SEEK_SET);
@@ -595,7 +594,10 @@ bool Model::loaddecal(char *filename,bool texture )
 
 	LOGFUNC;
 
-	LOG(std::string("Loading decal...") + filename);
+	// Changing the filename so that its more os specific
+	char * FixedFN = ConvertFileName(filename);
+
+	LOG(std::string("Loading decal...") + FixedFN);
 
 	int oldvertexNum,oldTriangleNum;
 	oldvertexNum=vertexNum;
@@ -605,7 +607,7 @@ bool Model::loaddecal(char *filename,bool texture )
 	numdecals=0;
 	color=0;
 
-	tfile=fopen( filename, "rb" );
+	tfile=fopen( FixedFN, "rb" );
 	// read model settings
 
 
@@ -712,7 +714,7 @@ bool Model::loadraw(char *filename )
 	type = rawtype;
 	color=0;
 
-	tfile=fopen( filename, "rb" );
+	tfile=fopen( ConvertFileName(filename), "rb" );
 	// read model settings
 
 

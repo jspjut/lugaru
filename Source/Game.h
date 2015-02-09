@@ -10,7 +10,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 See the GNU General Public License for more details.
 
@@ -21,6 +21,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef _GAME_H_
 #define _GAME_H_
+
+#include "SDL.h"
 
 #if (defined(__APPLE__) && defined(__MACH__))
 #  ifdef PLATFORM_MACOSX
@@ -38,10 +40,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "TGALoader.h"
 
-#if USE_SDL
-#include "SDL.h"
-#endif
-
 #if !PLATFORM_MACOSX
 #include "WinInput.h"
 #else
@@ -51,11 +49,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "Terrain.h"
 #include "Skybox.h"
 #include "Skeleton.h"
-#include "Models.h"   
+#include "Models.h"
 #include "Lights.h"
 #include "Person.h"
 #include "Constants.h"
-#include "fmod.h"
 #include "Sprites.h"
 //#include <agl.h>
 #include "Text.h"
@@ -68,7 +65,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 extern GLuint rabbittexture;
 
-class Game		
+class Game
 {
 public:
 
@@ -106,7 +103,6 @@ public:
 	int loaddistrib;
 	int keyselect;
 	int indemo;
-	int registered;
 
 	bool won;
 
@@ -241,10 +237,10 @@ public:
 	bool oldattackkey;
 
 	long long MD5_string (char *string);
-	static void LoadTexture(char *fileName, GLuint *textureid,int mipmap, bool hasalpha);
-	static void LoadTextureSave(char *fileName, GLuint *textureid,int mipmap,GLubyte *array, int *skinsize);
-	void LoadSave(char *fileName, GLuint *textureid,bool mipmap,GLubyte *array, int *skinsize);
-	bool AddClothes(char *fileName, GLuint *textureid,bool mipmap,GLubyte *array, int *skinsize);
+	static void LoadTexture(const char *fileName, GLuint *textureid,int mipmap, bool hasalpha);
+	static void LoadTextureSave(const char *fileName, GLuint *textureid,int mipmap,GLubyte *array, int *skinsize);
+	void LoadSave(const char *fileName, GLuint *textureid,bool mipmap,GLubyte *array, int *skinsize);
+	bool AddClothes(const char *fileName, GLuint *textureid,bool mipmap,GLubyte *array, int *skinsize);
 	void InitGame();
 	void LoadStuff();
 	void LoadingScreen();
@@ -279,7 +275,7 @@ public:
 	int musicselected;
 	int change;
 	Game();
-	~Game() {		
+	~Game() {
 		for(int i=0;i<10;i++){
 			if(Mainmenuitems[i])glDeleteTextures( 1, &Mainmenuitems[i] );
 		}
@@ -308,17 +304,9 @@ public:
 
 static __forceinline void swap_gl_buffers(void)
 {
-#ifdef WIN32
-    extern HDC hDC;
-    SwapBuffers( hDC);
-#elif USE_SDL
+
     SDL_GL_SwapBuffers();
-#elif PLATFORM_MACOSX
-    extern AGLContext gaglContext;
-    aglSwapBuffers(gaglContext);
-#else
-    #error define your platform.
-#endif
+
 }
 
 #ifdef __GNUC__

@@ -19,9 +19,9 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
+#include "Game.h"
 #include "Terrain.h"
 #include "Objects.h"
-#include "Game.h"
 extern XYZ viewer;
 extern float viewdistance;
 extern float lightambient[3],lightbrightness[3];
@@ -371,7 +371,7 @@ void Terrain::UpdateVertexArray(int whichx, int whichy){
 }
 
 
-bool Terrain::load(char *fileName)
+bool Terrain::load(const char *fileName)
 {
 	static long				i,j;
 	static long x,y;
@@ -380,8 +380,12 @@ bool Terrain::load(char *fileName)
 	float temptexdetail=texdetail;
 	texdetail=terraindetail;
 	//LoadTGA( fileName );
+
+	// Fixing filename so that it works with its own os
+	char * FixedFN = ConvertFileName(fileName);
+
 	unsigned char fileNamep[256];
-	CopyCStringToPascal(fileName,fileNamep);
+	CopyCStringToPascal(FixedFN, fileNamep);
 	//Load Image
 	upload_image( fileNamep ,0); 
 

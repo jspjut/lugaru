@@ -21,34 +21,38 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 
 #ifdef WIN32
-#include <vld.h>
+#define UINT8 WIN32API_UINT8
+#define UINT16 WIN32API_UINT16
+#define boolean WIN32API_boolean
+#include <windows.h>
+#undef UINT8
+#undef UINT16
+#undef boolean
 #endif
+
+
 
 #include "Game.h"
+extern "C" {
+	#include "zlib.h"
+	#include "png.h"
+   #ifdef WIN32
+		#define INT32 INT32_jpeg
+		#include "jpeglib.h"
+		#undef INT32
+	#else
+		#include "jpeglib.h"
+	#endif
+}
 
-#ifndef USE_DEVIL
-#  ifdef WIN32
-#    define USE_DEVIL
-#  endif
-#endif
+static bool load_image(const char * fname, TGAImageRec & tex);
+static bool load_png(const char * fname, TGAImageRec & tex);
+static bool load_jpg(const char * fname, TGAImageRec & tex);
+static bool save_image(const char * fname);
+static bool save_png(const char * fname);
 
-#if USE_DEVIL
-    #include "IL/il.h"
-    #include "IL/ilu.h"
-    #include "IL/ilut.h"
-#else
-    // just use libpng and libjpg directly; it's lighter-weight and easier
-    //  to manage the dependencies on Linux...
-    extern "C" {
-        #include "png.h"
-        #include "jpeglib.h"
-    }
-    static bool load_image(const char * fname, TGAImageRec & tex);
-    static bool load_png(const char * fname, TGAImageRec & tex);
-    static bool load_jpg(const char * fname, TGAImageRec & tex);
-    static bool save_image(const char * fname);
-    static bool save_png(const char * fname);
-#endif
+
+#include "openal_wrapper.h"
 
 // ADDED GWC
 #ifdef _MSC_VER
@@ -113,18 +117,16 @@ extern float volume;
 #include "gamegl.h"
 #include "MacCompatibility.h"
 
+
 #ifdef WIN32
 #include <shellapi.h>
+#include "win-res/resource.h"
 #endif
-
-#include "fmod.h"
-
-#include "res/resource.h"
 
 using namespace std;
 
 
-#if USE_SDL
+
 SDL_Rect **resolutions = NULL;
 static SDL_Rect rect_1024_768 = { 0, 0, 1024, 768 };
 static SDL_Rect rect_800_600  = { 0, 0, 800,  600 };
@@ -135,7 +137,7 @@ static SDL_Rect *hardcoded_resolutions[] = {
     &rect_640_480,
     NULL
 };
-#endif
+
 
 
 unsigned int resolutionDepths[8][2] = {0};
@@ -168,14 +170,24 @@ typedef struct tagPOINT {
 } POINT, *PPOINT; 
 #endif
 
-#if USE_SDL
+
+
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 4273)
+#endif
+
 #define GL_FUNC(ret,fn,params,call,rt) \
     extern "C" { \
-        static ret GLAPIENTRY (*p##fn) params = NULL; \
+        static ret (GLAPIENTRY *p##fn) params = NULL; \
         ret GLAPIENTRY fn params { rt p##fn call; } \
     }
 #include "glstubs.h"
 #undef GL_FUNC
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 static bool lookup_glsym(const char *funcname, void **func)
 {
@@ -216,17 +228,13 @@ void sdlGetCursorPos(POINT *pt)
 #define SetCursorPos(x, y) SDL_WarpMouse(x, y)
 #define ScreenToClient(x, pt)
 #define ClientToScreen(x, pt)
-#define MessageBox(hwnd,text,title,flags) STUBBED("msgbox")
+#ifdef MessageBox
+#undef MessageBox
 #endif
+#define MessageBox(hwnd,text,title,flags) STUBBED("msgbox")
+
 
 Point delta;
-
-#ifdef WIN32
-static const char g_wndClassName[]={ "LUGARUWINDOWCLASS" };
-static HINSTANCE g_appInstance;
-static HWND g_windowHandle;
-static HGLRC hRC;
-#endif
 
 static bool g_button, fullscreen = true;
 
@@ -257,9 +265,10 @@ Boolean gDone = false, gfFrontProcess = true;
 
 Game * pgame = 0;
 
-
+#ifndef __MINGW32__
 static int _argc = 0;
 static char **_argv = NULL;
+#endif
 
 bool cmdline(const char *cmd)
 {
@@ -268,7 +277,7 @@ bool cmdline(const char *cmd)
         char *arg = _argv[i];
         while (*arg == '-')
             arg++;
-        if (stricmp(arg, cmd) == 0)
+        if (strcasecmp(arg, cmd) == 0)
             return true;
     }
 
@@ -280,7 +289,7 @@ bool cmdline(const char *cmd)
 
 void ReportError (char * strError)
 {
-#ifdef WIN32  // !!! FIXME.  --ryan.
+#ifdef _MSC_VER  // !!! FIXME.  --ryan.
 	throw std::exception( strError);
 #endif
 
@@ -297,44 +306,11 @@ void ReportError (char * strError)
 
 void SetupDSpFullScreen ()
 {
-#ifdef WIN32
-	LOGFUNC;
-
-	if (fullscreen)
-	{
-		DEVMODE dmScreenSettings;
-		memset( &dmScreenSettings, 0, sizeof( dmScreenSettings));
-		dmScreenSettings.dmSize = sizeof( dmScreenSettings);
-		dmScreenSettings.dmPelsWidth	= kContextWidth;
-		dmScreenSettings.dmPelsHeight	= kContextHeight;
-		dmScreenSettings.dmBitsPerPel	= kBitsPerPixel;
-		dmScreenSettings.dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT;
-
-		// set video mode
-		if (ChangeDisplaySettings( &dmScreenSettings, CDS_FULLSCREEN) != DISP_CHANGE_SUCCESSFUL)
-		{
-			ReportError( "Could not set display mode");
-			return;
-		}
-	}
-
-	ShowCursor(FALSE);
-#endif
 }
 
 
 void ShutdownDSp ()
 {
-#ifdef WIN32
-	LOGFUNC;
-
-	if (fullscreen)
-	{
-		ChangeDisplaySettings( NULL, 0);
-	}
-
-	ShowCursor(TRUE);
-#endif
 }
 
 
@@ -344,11 +320,6 @@ void ShutdownDSp ()
 
 void DrawGL (Game & game)
 {
-#ifdef WIN32
-	if (hDC == 0)
-		return;
-#endif
-
 	game.DrawGLScene();
 }
 
@@ -375,9 +346,7 @@ Boolean Button()
     return g_button;
 }
 
-#if !USE_SDL
-static void initSDLKeyTable(void) {}
-#else
+
 #define MAX_SDLKEYS SDLK_LAST
 static unsigned short KeyTable[MAX_SDLKEYS];
 
@@ -582,6 +551,8 @@ static void sdlEventProc(const SDL_Event &e, Game &game)
                 ClearKey(MAC_CONTROL_KEY);
             if ((mod & KMOD_ALT) == 0)
                 ClearKey(MAC_OPTION_KEY);
+            if ((mod & KMOD_META) == 0)
+                ClearKey(MAC_COMMAND_KEY);
             if ((mod & KMOD_SHIFT) == 0)
                 ClearKey(MAC_SHIFT_KEY);
             if ((mod & KMOD_CAPS) == 0)
@@ -589,7 +560,7 @@ static void sdlEventProc(const SDL_Event &e, Game &game)
             return;
     }
 }
-#endif
+
 
 // --------------------------------------------------------------------------
 
@@ -879,10 +850,7 @@ Boolean SetUp (Game & game)
 		if(detail<0)detail=0;
 		if(screenwidth<0)screenwidth=640;
 		if(screenheight<0)screenheight=480;
-#if !USE_SDL  // we'll take anything that works.
-		if(screenwidth>3000)screenwidth=640;
-		if(screenheight>3000)screenheight=480;
-#endif
+
 	}
 	if(kBitsPerPixel!=32&&kBitsPerPixel!=16){
 		kBitsPerPixel=16;
@@ -893,7 +861,7 @@ Boolean SetUp (Game & game)
 
 	SetupDSpFullScreen();
 
-#if USE_SDL
+
     if (!SDL_WasInit(SDL_INIT_VIDEO))
     {
         if (SDL_Init(SDL_INIT_VIDEO) == -1)
@@ -992,115 +960,6 @@ Boolean SetUp (Game & game)
     if (!cmdline("nomousegrab"))
         SDL_WM_GrabInput(SDL_GRAB_ON);
 
-#elif (defined WIN32)
-	//------------------------------------------------------------------
-	// create window
-	int x = 0, y = 0;
-	RECT r = {0, 0, kContextWidth-1, kContextHeight-1};
-	DWORD dwStyle = WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE;
-	DWORD dwExStyle = WS_EX_APPWINDOW;
-
-	if (fullscreen)
-	{
-		dwStyle |= WS_POPUP;
-	}
-	else
-	{
-
-		dwStyle |= WS_OVERLAPPEDWINDOW;
-		dwExStyle |= WS_EX_WINDOWEDGE;
-	}
-
-	AdjustWindowRectEx(&r, dwStyle, FALSE, dwExStyle);
-
-	if (!fullscreen)
-	{
-		x = (GetSystemMetrics(SM_CXSCREEN) >> 1) - ((r.right - r.left + 1) >> 1);
-		y = (GetSystemMetrics(SM_CYSCREEN) >> 1) - ((r.bottom - r.top + 1) >> 1);
-	}
-
-	g_windowHandle=CreateWindowEx(
-		dwExStyle,
-		g_wndClassName, "Lugaru", dwStyle,
-		x, y,
-//		kContextWidth, kContextHeight,
-		r.right - r.left + 1, r.bottom - r.top + 1,
-		NULL,NULL,g_appInstance,NULL );
-	if (!g_windowHandle)
-	{
-		ReportError("Could not create window");
-		return false;
-	}
-
-	//------------------------------------------------------------------
-	// setup OpenGL
-
-	static PIXELFORMATDESCRIPTOR pfd =
-	{
-		sizeof(PIXELFORMATDESCRIPTOR),				// Size Of This Pixel Format Descriptor
-			1,											// Version Number
-			PFD_DRAW_TO_WINDOW |						// Format Must Support Window
-			PFD_SUPPORT_OPENGL |						// Format Must Support OpenGL
-			PFD_DOUBLEBUFFER,							// Must Support Double Buffering
-			PFD_TYPE_RGBA,								// Request An RGBA Format
-			kBitsPerPixel,								// Select Our Color Depth
-			0, 0, 0, 0, 0, 0,							// Color Bits Ignored
-			0,											// No Alpha Buffer
-			0,											// Shift Bit Ignored
-			0,											// No Accumulation Buffer
-			0, 0, 0, 0,									// Accumulation Bits Ignored
-			16,											// 16Bit Z-Buffer (Depth Buffer)  
-			0,											// No Stencil Buffer
-			0,											// No Auxiliary Buffer
-			PFD_MAIN_PLANE,								// Main Drawing Layer
-			0,											// Reserved
-			0, 0, 0										// Layer Masks Ignored
-	};
-
-	if (!(hDC = GetDC( g_windowHandle)))
-		ReportError( "Could not get device context");
-
-	GLuint PixelFormat;
-	if (!(PixelFormat = ChoosePixelFormat(hDC, &pfd)))
-	{
-		ReportError( "Could not find appropriate pixel format");
-		return false;
-	}
-
-	if (!DescribePixelFormat(hDC, PixelFormat, sizeof(PIXELFORMATDESCRIPTOR), &pfd))
-	{
-		ReportError( "Could not retrieve pixel format");
-		return false;
-	}
-
-	if (!SetPixelFormat( hDC, PixelFormat, &pfd))
-	{
-		ReportError( "Could not set pixel format");
-		return false;
-	}
-
-	if (!(hRC = wglCreateContext(hDC)))
-	{
-		ReportError( "Could not create rendering context");
-		return false;
-	}
-
-	if (!wglMakeCurrent(hDC, hRC))
-	{
-		ReportError( "Could not activate rendering context");
-		return false;
-	}
-
-	if (fullscreen)
-	{
-		// Place the window above all topmost windows
-		SetWindowPos( g_windowHandle, HWND_TOPMOST, 0,0,0,0,
-			SWP_NOMOVE | SWP_NOSIZE );
-	}
-
-	SetForegroundWindow(g_windowHandle);
-	SetFocus(g_windowHandle);
-#endif
 
 	glClear( GL_COLOR_BUFFER_BIT );
 	swap_gl_buffers();
@@ -1144,25 +1003,6 @@ Boolean SetUp (Game & game)
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glAlphaFunc( GL_GREATER, 0.5f);
 
-#if USE_DEVIL
-	if (ilGetInteger(IL_VERSION_NUM) < IL_VERSION ||
-		iluGetInteger(ILU_VERSION_NUM) < ILU_VERSION ||
-		ilutGetInteger(ILUT_VERSION_NUM) < ILUT_VERSION)
-	{
-		ReportError("DevIL version is different...exiting!\n");
-		return false;
-	}
-
-	ilInit();
-	iluInit();
-	ilutInit();
-
-	ilutRenderer(ILUT_OPENGL);
-
-	ilEnable(IL_ORIGIN_SET);
-	ilOriginFunc(IL_ORIGIN_LOWER_LEFT);
-#endif
-
 	GLint width = kContextWidth;
 	GLint height = kContextHeight;
 	gMidPoint.h = width / 2;
@@ -1182,7 +1022,7 @@ Boolean SetUp (Game & game)
 
 static void DoMouse(Game & game)
 {
-#if USE_SDL
+
 	if(mainmenu||(abs(game.deltah)<10*realmultiplier*1000&&abs(game.deltav)<10*realmultiplier*1000))
 	{
 		game.deltah *= usermousesensitivity;
@@ -1198,51 +1038,7 @@ static void DoMouse(Game & game)
         else if (game.mousecoordv >= kContextHeight)
             game.mousecoordv = kContextHeight - 1;
 	}
-#else
-	static Point lastMouse = {-1,-1};
-	Point globalMouse;
 
-	POINT pos;
-	GetCursorPos(&pos);
-	ScreenToClient(g_windowHandle, &pos);
-	globalMouse.h = pos.x;
-	globalMouse.v = pos.y;
-
-	if (lastMouse.h == globalMouse.h && lastMouse.v == globalMouse.v)
-	{
-		game.deltah=0;
-		game.deltav=0;
-	}
-	else
-	{
-		static Point virtualMouse = {0,0};
-		delta = globalMouse;
-
-		delta.h -= lastMouse.h;
-		delta.v -= lastMouse.v;
-		lastMouse.h = pos.x;
-		lastMouse.v = pos.y;
-
-		if(mainmenu||(abs(delta.h)<10*realmultiplier*1000&&abs(delta.v)<10*realmultiplier*1000)){
-			game.deltah=delta.h*usermousesensitivity;
-			game.deltav=delta.v*usermousesensitivity;
-			game.mousecoordh=globalMouse.h;
-			game.mousecoordv=globalMouse.v;
-		}
-
-		if(!mainmenu)
-		{
-			if(lastMouse.h>gMidPoint.h+100||lastMouse.h<gMidPoint.h-100||lastMouse.v>gMidPoint.v+100||lastMouse.v<gMidPoint.v-100){
-				pos.x = gMidPoint.h;
-				pos.y = gMidPoint.v;
-				ClientToScreen(g_windowHandle, &pos);
-				//SetCursorPos( gMidPoint.h,gMidPoint.v);
-				SetCursorPos(pos.x, pos.y);
-				lastMouse = gMidPoint;
-			}
-		}
-	}
-#endif
 }
 
 
@@ -1339,7 +1135,7 @@ void DoUpdate (Game & game)
 	AbsoluteTime currTime = UpTime ();
 	static int num_channels = 0;
 	
-	num_channels += FSOUND_GetChannelsPlaying();
+	num_channels += OPENAL_GetChannelsPlaying();
 	double deltaTime = (float) AbsoluteDeltaToDuration (currTime, start);
 
 	if (0 > deltaTime)	// if negative microseconds
@@ -1378,11 +1174,9 @@ void CleanUp (void)
 
 //	game.Dispose();
 
-#if USE_DEVIL
-	ilShutDown();
-#endif
 
-#if USE_SDL
+
+
     SDL_Quit();
     #define GL_FUNC(ret,fn,params,call,rt) p##fn = NULL;
     #include "glstubs.h"
@@ -1391,51 +1185,13 @@ void CleanUp (void)
     //  the context is destroyed and libGL unloaded by SDL_Quit().
     pglDeleteTextures = glDeleteTextures_doNothing;
 
-#elif (defined WIN32)
-	if (hRC)
-	{
-		wglMakeCurrent( NULL, NULL);
-		wglDeleteContext( hRC);
-		hRC = NULL;
-	}
-
-	if (hDC)
-	{
-		ReleaseDC( g_windowHandle, hDC);
-		hDC = NULL;
-	}
-
-	if (g_windowHandle)
-	{
-		ShowWindow( g_windowHandle, SW_HIDE );
-		DestroyWindow( g_windowHandle);
-		g_windowHandle = NULL;
-	}
-
-	ShutdownDSp ();
-	ClipCursor(NULL);
-#endif
 }
 
 // --------------------------------------------------------------------------
 
-static bool g_focused = true;
-
-
 static bool IsFocused()
 {
-#ifdef WIN32
-	if (!g_focused)
-		return false;
-
-	if (GetActiveWindow() != g_windowHandle)
-		return false;
-
-	if (IsIconic( g_windowHandle))
-		return false;
-#endif
-
-	return true;
+    return ((SDL_GetAppState() & SDL_APPINPUTFOCUS) != 0);
 }
 
 
@@ -1522,12 +1278,12 @@ char *calcBaseDir(const char *argv0)
     char *retval;
     char *envr;
 
-    char *ptr = strrchr(argv0, '/');
+    const char *ptr = strrchr((char *)argv0, '/');
     if (strchr(argv0, '/'))
     {
         retval = strdup(argv0);
         if (retval)
-            *(strrchr(retval, '/')) = '\0';
+            *((char *) strrchr(retval, '/')) = '\0';
         return(retval);
     }
 
@@ -1567,18 +1323,19 @@ static inline void chdirToAppPath(const char *argv0)
 
 int main(int argc, char **argv)
 {
+#ifndef __MINGW32__
     _argc = argc;
     _argv = argv;
+#endif
+
+    // !!! FIXME: we could use a Win32 API for this.  --ryan.
 #ifndef WIN32
     chdirToAppPath(argv[0]);
 #endif
 
 	LOGFUNC;
 
-#ifndef WIN32  // this is in WinMain, too.
-	logger.start(true);
 	memset( &g_theKeys, 0, sizeof( KeyMap));
-#endif
 
     initSDLKeyTable();
 
@@ -1597,14 +1354,14 @@ int main(int argc, char **argv)
 			if (!SetUp (game))
                 return 42;
 
-			while (!gDone&&!game.quit&&(!game.tryquit||!game.registered))
+			while (!gDone&&!game.quit&&(!game.tryquit))
 			{
 				if (IsFocused())
 				{
 					gameFocused = true;
 
 					// check windows messages
-					#if USE_SDL
+			
 					game.deltah = 0;
 					game.deltav = 0;
 					SDL_Event e;
@@ -1618,24 +1375,7 @@ int main(int argc, char **argv)
 						}
 						sdlEventProc(e, game);
 					}
-
-					#elif (defined WIN32)
-					MSG msg;
-					// message pump
-					while( PeekMessage( &msg, NULL, 0, 0, PM_REMOVE | PM_NOYIELD ) )
-					{
-						if( msg.message == WM_QUIT )
-						{
-							gDone=true;
-							break;
-						}
-						else
-						{
-							TranslateMessage( &msg );
-							DispatchMessage( &msg );
-						}
-					}
-					#endif
+				
 
 					// game
 					DoUpdate(game);
@@ -1650,31 +1390,7 @@ int main(int argc, char **argv)
 					}
 
 					// game is not in focus, give CPU time to other apps by waiting for messages instead of 'peeking'
-                    #ifdef WIN32
-					MSG msg;
-					BOOL bRet;
-					//if (GetMessage( &msg, g_windowHandle, 0, 0 ))
-					/*if (GetMessage( &msg, NULL, 0, 0 ))
-					{
-						TranslateMessage(&msg);
-						DispatchMessage(&msg);
-					}*/
-					if ( (bRet = GetMessage( &msg, NULL, 0, 0 )) != 0)
-					{ 
-						if (bRet <= 0)
-						{
-							// handle the error and possibly exit
-							gDone=true;
-						}
-						else
-						{
-							TranslateMessage(&msg); 
-							DispatchMessage(&msg); 
-						}
-					}
-                    #else
                     STUBBED("give up CPU but sniff the event queue");
-                    #endif
 				}
 			}
 
@@ -1707,7 +1423,7 @@ int main(int argc, char **argv)
 		std::string e = "Caught exception: ";
 		e += error.what();
 
-		LOG(e, Logger::LOG_ERR);
+		LOG(e);
 
 		MessageBox(g_windowHandle, error.what(), "ERROR", MB_OK | MB_ICONEXCLAMATION);
 	}
@@ -1721,558 +1437,7 @@ int main(int argc, char **argv)
 
 	// --------------------------------------------------------------------------
 
-#ifdef WIN32
-#define MAX_WINKEYS 256
-	static unsigned short KeyTable[MAX_WINKEYS]=
-	{
-		0xffff,  // (0)
-			MAC_MOUSEBUTTON1,  // VK_LBUTTON	(1)
-			MAC_MOUSEBUTTON2,  // VK_RBUTTON	(2)
-			0xffff,  // VK_CANCEL	(3)
-			0xffff,  // VK_MBUTTON	(4)
-			0xffff,  // (5)
-			0xffff,  // (6)
-			0xffff,  // (7)
-			MAC_DELETE_KEY,  // VK_BACK	(8)
-			MAC_TAB_KEY,  // VK_TAB	(9)
-			0xffff,  // (10)
-			0xffff,  // (11)
-			0xffff,  // VK_CLEAR	(12)
-			MAC_RETURN_KEY,  // VK_RETURN	(13)
-			0xffff,  // (14)
-			0xffff,  // (15)
-			MAC_SHIFT_KEY,  // VK_SHIFT	(16)
-			MAC_CONTROL_KEY,  // VK_CONTROL	(17)
-			MAC_OPTION_KEY,  // VK_MENU	(18)
-			0xffff,  // VK_PAUSE	(19)
-			MAC_CAPS_LOCK_KEY,  // #define VK_CAPITAL	(20)
-			0xffff,  // (21)
-			0xffff,  // (22)
-			0xffff,  // (23)
-			0xffff,  // (24)
-			0xffff,  // (25)
-			0xffff,  // (26)
-			MAC_ESCAPE_KEY,  // VK_ESCAPE	(27)
-			0xffff,  // (28)
-			0xffff,  // (29)
-			0xffff,  // (30)
-			0xffff,  // (31)
-			MAC_SPACE_KEY,  // VK_SPACE	(32)
-			MAC_PAGE_UP_KEY,  // VK_PRIOR	(33)
-			MAC_PAGE_DOWN_KEY,  // VK_NEXT	(34)
-			MAC_END_KEY,  // VK_END	(35)
-			MAC_HOME_KEY,  // VK_HOME	(36)
-			MAC_ARROW_LEFT_KEY,  // VK_LEFT	(37)
-			MAC_ARROW_UP_KEY,  // VK_UP	(38)
-			MAC_ARROW_RIGHT_KEY,  // VK_RIGHT	(39)
-			MAC_ARROW_DOWN_KEY,  // VK_DOWN	(40)
-			0xffff,  // VK_SELECT	(41)
-			0xffff,  // VK_PRINT	(42)
-			0xffff,  // VK_EXECUTE	(43)
-			0xffff,  // VK_SNAPSHOT	(44)
-			MAC_INSERT_KEY,  // VK_INSERT	(45)
-			MAC_DEL_KEY,  // VK_DELETE	(46)
-			0xffff,  // VK_HELP	(47)
-			MAC_0_KEY,  // VK_0	(48)
-			MAC_1_KEY,  // VK_1	(49)
-			MAC_2_KEY,  // VK_2	(50)
-			MAC_3_KEY,  // VK_3	(51)
-			MAC_4_KEY,  // VK_4	(52)
-			MAC_5_KEY,  // VK_5	(53)
-			MAC_6_KEY,  // VK_6	(54)
-			MAC_7_KEY,  // VK_7	(55)
-			MAC_8_KEY,  // VK_8	(56)
-			MAC_9_KEY,  // VK_9	(57)
-			0xffff,  // (58)
-			0xffff,  // (59)
-			0xffff,  // (60)
-			0xffff,  // (61)
-			0xffff,  // (62)
-			0xffff,  // (63)
-			0xffff,  // (64)
-			MAC_A_KEY,  // VK_A	(65)
-			MAC_B_KEY,  // VK_B	(66)
-			MAC_C_KEY,  // VK_C	(67)
-			MAC_D_KEY,  // VK_D	(68)
-			MAC_E_KEY,  // VK_E	(69)
-			MAC_F_KEY,  // VK_F	(70)
-			MAC_G_KEY,  // VK_G	(71)
-			MAC_H_KEY,  // VK_H	(72)
-			MAC_I_KEY,  // VK_I	(73)
-			MAC_J_KEY,  // VK_J	(74)
-			MAC_K_KEY,  // VK_K	(75)
-			MAC_L_KEY,  // VK_L	(76)
-			MAC_M_KEY,  // VK_M	(77)
-			MAC_N_KEY,  // VK_N	(78)
-			MAC_O_KEY,  // VK_O	(79)
-			MAC_P_KEY,  // VK_P	(80)
-			MAC_Q_KEY,  // VK_Q	(81)
-			MAC_R_KEY,  // VK_R	(82)
-			MAC_S_KEY,  // VK_S	(83)
-			MAC_T_KEY,  // VK_T	(84)
-			MAC_U_KEY,  // VK_U	(85)
-			MAC_V_KEY,  // VK_V	(86)
-			MAC_W_KEY,  // VK_W	(87)
-			MAC_X_KEY,  // VK_X	(88)
-			MAC_Y_KEY,  // VK_Y	(89)
-			MAC_Z_KEY,  // VK_Z	(90)
-			0xffff,  // (91)
-			0xffff,  // (92)
-			0xffff,  // (93)
-			0xffff,  // (94)
-			0xffff,  // (95)
-			MAC_NUMPAD_0_KEY,  // VK_NUMPAD0	(96)
-			MAC_NUMPAD_1_KEY,  // VK_NUMPAD1	(97)
-			MAC_NUMPAD_2_KEY,  // VK_NUMPAD2	(98)
-			MAC_NUMPAD_3_KEY,  // VK_NUMPAD3	(99)
-			MAC_NUMPAD_4_KEY,  // VK_NUMPAD4	(100)
-			MAC_NUMPAD_5_KEY,  // VK_NUMPAD5	(101)
-			MAC_NUMPAD_6_KEY,  // VK_NUMPAD6	(102)
-			MAC_NUMPAD_7_KEY,  // VK_NUMPAD7	(103)
-			MAC_NUMPAD_8_KEY,  // VK_NUMPAD8	(104)
-			MAC_NUMPAD_9_KEY,  // VK_NUMPAD9	(105)
-			MAC_NUMPAD_ASTERISK_KEY,  // VK_MULTIPLY	(106)
-			MAC_NUMPAD_PLUS_KEY,  // VK_ADD	(107)
-			MAC_NUMPAD_ENTER_KEY,  // VK_SEPARATOR	(108)
-			MAC_NUMPAD_MINUS_KEY,  // VK_SUBTRACT	(109)
-			MAC_NUMPAD_PERIOD_KEY,  // VK_DECIMAL	(110)
-			MAC_NUMPAD_SLASH_KEY,  // VK_DIVIDE	(111)
-			MAC_F1_KEY,  // VK_F1	(112)
-			MAC_F2_KEY,  // VK_F2	(113)
-			MAC_F3_KEY,  // VK_F3	(114)
-			MAC_F4_KEY,  // VK_F4	(115)
-			MAC_F5_KEY,  // VK_F5	(116)
-			MAC_F6_KEY,  // VK_F6	(117)
-			MAC_F7_KEY,  // VK_F7	(118)
-			MAC_F8_KEY,  // VK_F8	(119)
-			MAC_F9_KEY,  // VK_F9	(120)
-			MAC_F10_KEY,  // VK_F10	(121)
-			MAC_F11_KEY,  // VK_F11	(122)
-			MAC_F12_KEY,  // VK_F12	(123)
-			0xffff,  // (124)
-			0xffff,  // (125)
-			0xffff,  // (126)
-			0xffff,  // (127)
-			0xffff,  // (128)
-			0xffff,  // (129)
-			0xffff,  // (130)
-			0xffff,  // (131)
-			0xffff,  // (132)
-			0xffff,  // (133)
-			0xffff,  // (134)
-			0xffff,  // (135)
-			0xffff,  // (136)
-			0xffff,  // (137)
-			0xffff,  // (138)
-			0xffff,  // (139)
-			0xffff,  // (130)
-			0xffff,  // (141)
-			0xffff,  // (142)
-			0xffff,  // (143)
-			0xffff,  // VK_NUMLOCK	(144)
-			0xffff,  // VK_SCROLL	(145)
-			0xffff,  // (146)
-			0xffff,  // (147)
-			0xffff,  // (148)
-			0xffff,  // (149)
-			0xffff,  // (150)
-			0xffff,  // (151)
-			0xffff,  // (152)
-			0xffff,  // (153)
-			0xffff,  // (154)
-			0xffff,  // (155)
-			0xffff,  // (156)
-			0xffff,  // (157)
-			0xffff,  // (158)
-			0xffff,  // (159)
-			MAC_SHIFT_KEY,  // VK_LSHIFT	(160)
-			MAC_SHIFT_KEY,  // VK_RSHIFT	(161)
-			MAC_CONTROL_KEY,  // VK_LCONTROL	(162)
-			MAC_CONTROL_KEY,  // VK_RCONTROL	(163)
-			MAC_OPTION_KEY,  // VK_LMENU	(164)
-			MAC_OPTION_KEY,  // VK_RMENU	(165)
-			0xffff,  // (166)
-			0xffff,  // (167)
-			0xffff,  // (168)
-			0xffff,  // (169)
-			0xffff,  // (170)
-			0xffff,  // (171)
-			0xffff,  // (172)
-			0xffff,  // (173)
-			0xffff,  // (174)
-			0xffff,  // (175)
-			0xffff,  // (176)
-			0xffff,  // (177)
-			0xffff,  // (178)
-			0xffff,  // (179)
-			0xffff,  // (180)
-			0xffff,  // (181)
-			0xffff,  // (182)
-			0xffff,  // (183)
-			0xffff,  // (184)
-			0xffff,  // (185)
-			MAC_SEMICOLON_KEY,  // (186)
-			MAC_PLUS_KEY,  // (187)
-			MAC_COMMA_KEY,  // (188)
-			MAC_MINUS_KEY,  // (189)
-			MAC_PERIOD_KEY,  // (190)
-			MAC_SLASH_KEY,  // (191)
-			MAC_TILDE_KEY,  // (192)
-			0xffff,  // (193)
-			0xffff,  // (194)
-			0xffff,  // (195)
-			0xffff,  // (196)
-			0xffff,  // (197)
-			0xffff,  // (198)
-			0xffff,  // (199)
-			0xffff,  // (200)
-			0xffff,  // (201)
-			0xffff,  // (202)
-			0xffff,  // (203)
-			0xffff,  // (204)
-			0xffff,  // (205)
-			0xffff,  // (206)
-			0xffff,  // (207)
-			0xffff,  // (208)
-			0xffff,  // (209)
-			0xffff,  // (210)
-			0xffff,  // (211)
-			0xffff,  // (212)
-			0xffff,  // (213)
-			0xffff,  // (214)
-			0xffff,  // (215)
-			0xffff,  // (216)
-			0xffff,  // (217)
-			0xffff,  // (218)
-			MAC_LEFTBRACKET_KEY,  // (219)
-			MAC_BACKSLASH_KEY,  // (220)
-			MAC_RIGHTBRACKET_KEY,  // (221)
-			MAC_APOSTROPHE_KEY,  // (222)
-			0xffff,  // (223)
-			0xffff,  // (224)
-			0xffff,  // (225)
-			0xffff,  // (226)
-			0xffff,  // (227)
-			0xffff,  // (228)
-			0xffff,  // (229)
-			0xffff,  // (230)
-			0xffff,  // (231)
-			0xffff,  // (232)
-			0xffff,  // (233)
-			0xffff,  // (234)
-			0xffff,  // (235)
-			0xffff,  // (236)
-			0xffff,  // (237)
-			0xffff,  // (238)
-			0xffff,  // (239)
-			0xffff,  // (240)
-			0xffff,  // (241)
-			0xffff,  // (242)
-			0xffff,  // (243)
-			0xffff,  // (244)
-			0xffff,  // (245)
-			0xffff,  // (246)
-			0xffff,  // (247)
-			0xffff,  // (248)
-			0xffff,  // (249)
-			0xffff,  // (250)
-			0xffff,  // (251)
-			0xffff,  // (252)
-			0xffff,  // (253)
-			0xffff,  // (254)
-			0xffff,  // (255)
-	};
 
-	void ClipMouseToWindow(HWND window)
-	{
-		RECT wRect;
-
-		GetClientRect(window, &wRect);
-
-		ClientToScreen(window, (LPPOINT)&wRect.left);
-		ClientToScreen(window, (LPPOINT)&wRect.right);
-
-		ClipCursor(&wRect);
-
-		return;
-	}
-
-	LRESULT FAR PASCAL AppWndProc(HWND hWnd,UINT msg,WPARAM wParam,LPARAM lParam)
-	{
-		/* this is where we receive all messages concerning this window
-		* we can either process a message or pass it on to the default
-		* message handler of windows */
-
-		static PAINTSTRUCT ps;
-
-		switch(msg)
-		{
-		case WM_ACTIVATE:	// Watch For Window Activate Message
-			{
-				// Check Minimization State
-				BOOL iconified = HIWORD(wParam) ? TRUE : FALSE;
-
-				if (LOWORD(wParam) == WA_INACTIVE)
-				{
-					ClipCursor(NULL);
-
-					if (fullscreen)
-					{
-						if( !iconified )
-						{
-							// Minimize window
-							CloseWindow( hWnd );
-
-							// The window is now iconified
-							iconified = GL_TRUE;
-						}
-					}
-
-					ShutdownDSp();
-
-					g_focused=false;				// Program Is Active
-				}
-				else
-				{
-					SetupDSpFullScreen();
-
-					if( iconified )
-					{
-						// Minimize window
-						OpenIcon( hWnd );
-
-						// The window is now iconified
-						iconified = GL_FALSE;
-
-						// Activate window
-						ShowWindow( hWnd, SW_SHOW );
-						SetForegroundWindow( hWnd );
-						SetFocus( hWnd );
-					}
-
-					ClipMouseToWindow(hWnd);
-					g_focused=true;			// Program Is No Longer Active
-				}
-
-				return 0;						// Return To The Message Loop
-			}
-
-		case WM_KEYDOWN:
-		case WM_SYSKEYDOWN:
-			{
-				// check for Alt-F4 (exit hotkey)
-				if (wParam == VK_F4)
-				{
-					if (GetKeyState( VK_MENU) & 0x8080)
-					{
-						gDone = true;
-						break;
-					}
-				}
-				if (wParam < MAX_WINKEYS)
-				{
-					if (KeyTable[wParam] != 0xffff)
-						SetKey( KeyTable[wParam]);
-				}
-				return (0);
-			}
-
-		case WM_KEYUP:
-		case WM_SYSKEYUP:
-			{
-				if (wParam < MAX_WINKEYS)
-					if (KeyTable[wParam] != 0xffff)
-						ClearKey( KeyTable[wParam]);
-				return (0);
-			}
-
-		case WM_CHAR:
-		case WM_DEADCHAR:
-		case WM_SYSCHAR:
-		case WM_SYSDEADCHAR:
-			return (0);
-
-		case WM_NCLBUTTONDOWN:
-		case WM_LBUTTONDOWN:
-			{
-				g_button = true;
-				buttons[ 0] = true;
-			}
-			return (0);
-
-		case WM_NCRBUTTONDOWN:
-		case WM_RBUTTONDOWN:
-			{
-				buttons[ 1] = true;
-			}
-			return (0);
-
-		case WM_NCMBUTTONDOWN:
-		case WM_MBUTTONDOWN:
-			{
-				buttons[ 2] = true;
-			}
-			return (0);
-
-		case WM_NCLBUTTONUP:
-		case WM_LBUTTONUP:
-			{
-				g_button = false;
-				buttons[ 0] = false;
-			}
-			return (0);
-
-		case WM_NCRBUTTONUP:
-		case WM_RBUTTONUP:
-			{
-				buttons[ 1] = false;
-			}
-			return (0);
-
-		case WM_NCMBUTTONUP:
-		case WM_MBUTTONUP:
-			{
-				buttons[ 2] = false;
-			}
-			return (0);
-
-		case WM_NCLBUTTONDBLCLK:
-		case WM_NCRBUTTONDBLCLK:
-		case WM_NCMBUTTONDBLCLK:
-		case WM_LBUTTONDBLCLK:
-			return (0);
-		case WM_RBUTTONDBLCLK:
-		case WM_MBUTTONDBLCLK:
-			return (0);
-
-		case WM_NCMOUSEMOVE:
-		case WM_MOUSEMOVE:
-			/*			((WindowInfo *)g_lastWindow->GetInfo())->m_mouseX = (signed short)(lParam & 0xffff);
-			((WindowInfo *)g_lastWindow->GetInfo())->m_mouseY = (signed short)(lParam >> 16);
-			if (g_lastWindow->m_mouseCallbacksEnabled) g_lastWindow->MouseMoveCallback();
-			*///			goto winmessage;
-			return (0);
-
-		case WM_SYSCOMMAND:						// Intercept System Commands
-			{
-				switch (wParam)						// Check System Calls
-				{
-				case SC_SCREENSAVE:				// Screensaver Trying To Start?
-				case SC_MONITORPOWER:			// Monitor Trying To Enter Powersave?
-					return 0;					// Prevent From Happening
-
-					// User trying to access application menu using ALT?
-				case SC_KEYMENU:
-					return 0;
-				}
-			}
-			break;
-
-		case WM_MOVE:
-//			{
-//				ReleaseCapture();
-//				ClipMouseToWindow(hWnd);
-//			}
-			break;
-
-		case WM_SIZE:
-			break;
-
-		case WM_CLOSE:
-			{
-				//gDone =  true;
-				//game.tryquit=1;
-			}
-			//return (0);
-
-		case WM_DESTROY:
-			{
-				//ClipCursor(NULL);
-				PostQuitMessage(0);  /* Terminate Application */
-			}
-			return (0);
-
-		case WM_ERASEBKGND:
-			break;
-
-		case WM_PAINT:
-//			BeginPaint( g_windowHandle,&ps);
-//			EndPaint( g_windowHandle,&ps);
-			break;
-
-		default:
-			break;
-		}
-
-		/* We processed the message and there
-		* is no processing by Windows necessary */
-
-		/* We didn't process the message so let Windows do it */
-		return DefWindowProc(hWnd,msg,wParam,lParam);
-	}
-
-
-	static BOOL RegisterWindowClasses(HINSTANCE hFirstInstance)
-	{
-		WNDCLASSEX wc;
-		memset( &wc, 0, sizeof( wc));
-
-		/* Register the window class. */
-		wc.cbSize = sizeof(wc);
-#undef style
-		wc.style = (CS_DBLCLKS | CS_HREDRAW | CS_VREDRAW | CS_OWNDC);  /* Combination of Class Styles */
-		wc.lpfnWndProc = AppWndProc;       /* Adress of Window Procedure */
-		wc.cbClsExtra = 0;                 /* Extra Bytes allocated for this Class */
-		wc.cbWndExtra = 0;                 /* Extra Bytes allocated for each Window */
-		wc.hInstance = hFirstInstance;     /* Handle of program instance */
-		wc.hIcon = LoadIcon( hFirstInstance, MAKEINTRESOURCE(IDI_LUGARU) );
-		wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-		wc.hbrBackground = NULL;
-		wc.lpszMenuName  = NULL;
-		wc.lpszClassName = g_wndClassName; /* Name of the Window Class */
-		wc.hIconSm = LoadIcon( hFirstInstance, MAKEINTRESOURCE(IDI_LUGARU) );
-
-		if (!RegisterClassEx(&wc)) return FALSE;  /* Register Class failed */
-
-		return TRUE;
-	}
-#endif
-
-#if !USE_SDL
-	int resolutionID(int width, int height)
-	{
-		int whichres;
-		whichres=-1;
-		if(width==640 && height==480)whichres=0;
-		if(width==800 && height==600)whichres=1;
-		if(width==1024 && height==768)whichres=2;
-		if(width==1280 && height==1024)whichres=3;
-		if(width==1600 && height==1200)whichres=4;
-		if(width==840 && height==524)whichres=5;
-		if(width==1024 && height==640)whichres=6;
-		if(width==1344 && height==840)whichres=7;
-		if(width==1920 && height==1200)whichres=8;
-
-		return whichres;
-	}
-
-	int closestResolution(int width, int height)
-	{
-		int whichres;
-		whichres=-1;
-		if(width>=640 && height>=480)whichres=0;
-		if(width>=800 && height>=600)whichres=1;
-		if(width>=1024 && height>=768)whichres=2;
-		if(width>=1280 && height>=1024)whichres=3;
-		if(width>=1600 && height>=1200)whichres=4;
-		if(width==840 && height==524)whichres=5;
-		if(width==1024 && height==640)whichres=6;
-		if(width==1344 && height==840)whichres=7;
-		if(width>=1920 && height>=1200)whichres=8;
-
-		return whichres;
-	}
-#endif
 
 	bool selectDetail(int & width, int & height, int & bpp, int & detail)
 	{
@@ -2280,199 +1445,67 @@ int main(int argc, char **argv)
 
 		// currently with SDL, we just use whatever is requested
 		//  and don't care.  --ryan.
-		#if !USE_SDL
-		int whichres = closestResolution(width, height);
-
-		while (true)
-		{
-			if(whichres<=0 || whichres>8){
-				whichres = 0;
-				width=640;
-				height=480;
-			}
-			if(whichres==1){
-				width=800;
-				height=600;
-			}
-			if(whichres==2){
-				width=1024;
-				height=768;
-			}
-			if(whichres==3){
-				width=1280;
-				height=1024;
-			}
-			if(whichres==4){
-				width=1600;
-				height=1200;
-			}
-			if(whichres==5){
-				width=840;
-				height=524;
-			}
-			if(whichres==6){
-				width=1024;
-				height=640;
-			}
-			if(whichres==7){
-				width=1344;
-				height=840;
-			}
-			if(whichres==8){
-				width=1920;
-				height=1200;
-			}
-
-			if ((detail != 0) && (resolutionDepths[whichres][1] != 0))
-			{
-				break;
-			}
-			else if ((detail == 0) && (resolutionDepths[whichres][0] != 0))
-			{
-				break;
-			}
-			else if ((detail != 0) && (resolutionDepths[whichres][0] != 0))
-			{
-				res = false;
-				detail = 0;
-				break;
-			}
-			else
-
-            if (0 == whichres)
-			{
-				break;
-			}
-
-			--whichres;
-		}
-
-		bpp = resolutionDepths[whichres][(detail != 0)];
-		#endif
+		
 
 		return res;
 	}
 
-    #ifdef WIN32
-	int __stdcall WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine,int nShowCmd)
-	{
-		int argc = 0;
-		LPWSTR * cl = CommandLineToArgvW(GetCommandLineW(), &argc);
-		if (argc > 1)
-		{
-			if (0 == _wcsicmp(cl[1], L"-windowed"))
-			{
-				fullscreen = false;
-			}
-		}
-
-		logger.start(true);
-
-		memset( &g_theKeys, 0, sizeof( KeyMap));
-
-		unsigned int i = 0;
-		DEVMODE mode;
-		memset(&mode, 0, sizeof(mode));
-		mode.dmSize = sizeof(mode);
-		while (EnumDisplaySettings(NULL, i++, &mode))
-		{
-			if (mode.dmBitsPerPel < 16)
-			{
-				continue;
-			}
-
-			int res = resolutionID(mode.dmPelsWidth, mode.dmPelsHeight);
-
-			if (res > -1 && res < 8)
-			{
-				if (DISP_CHANGE_SUCCESSFUL != ChangeDisplaySettings(&mode, CDS_TEST))
-				{
-					continue;
-				}
-
-				switch(mode.dmBitsPerPel)
-				{
-				case 32:
-				case 24:
-					resolutionDepths[res][1] = mode.dmBitsPerPel;
-					break;
-				case 16:
-					resolutionDepths[res][0] = mode.dmBitsPerPel;
-					break;
-				}
-			}
-		}
-
-		/* if there is no Instance of our program in memory then register the window class */
-		if (hPrevInstance == NULL && !RegisterWindowClasses(hInstance))
-			return FALSE;  /* registration failed! */
-
-		g_appInstance=hInstance;
-
-		main(0, NULL);
-
-		UnregisterClass( g_wndClassName, hInstance);
-
-		return TRUE;
-
-	}
-    #endif
-
 	extern int channels[100];
-	extern FSOUND_SAMPLE * samp[100];
-	extern FSOUND_STREAM * strm[20];
+	extern OPENAL_SAMPLE * samp[100];
+	extern OPENAL_STREAM * strm[20];
 
-	extern "C" void PlaySoundEx(int chan, FSOUND_SAMPLE *sptr, FSOUND_DSPUNIT *dsp, signed char startpaused)
+	extern "C" void PlaySoundEx(int chan, OPENAL_SAMPLE *sptr, OPENAL_DSPUNIT *dsp, signed char startpaused)
 	{
-		const FSOUND_SAMPLE * currSample = FSOUND_GetCurrentSample(channels[chan]);
+		const OPENAL_SAMPLE * currSample = OPENAL_GetCurrentSample(channels[chan]);
 		if (currSample && currSample == samp[chan])
 		{
-			if (FSOUND_GetPaused(channels[chan]))
+			if (OPENAL_GetPaused(channels[chan]))
 			{
-				FSOUND_StopSound(channels[chan]);
-				channels[chan] = FSOUND_FREE;
+				OPENAL_StopSound(channels[chan]);
+				channels[chan] = OPENAL_FREE;
 			}
-			else if (FSOUND_IsPlaying(channels[chan]))
+			else if (OPENAL_IsPlaying(channels[chan]))
 			{
-				int loop_mode = FSOUND_GetLoopMode(channels[chan]);
-				if (loop_mode & FSOUND_LOOP_OFF)
+				int loop_mode = OPENAL_GetLoopMode(channels[chan]);
+				if (loop_mode & OPENAL_LOOP_OFF)
 				{
-					channels[chan] = FSOUND_FREE;
+					channels[chan] = OPENAL_FREE;
 				}
 			}
 		}
 		else
 		{
-			channels[chan] = FSOUND_FREE;
+			channels[chan] = OPENAL_FREE;
 		}
 
-		channels[chan] = FSOUND_PlaySoundEx(channels[chan], sptr, dsp, startpaused);
+		channels[chan] = OPENAL_PlaySoundEx(channels[chan], sptr, dsp, startpaused);
 		if (channels[chan] < 0)
 		{
-			channels[chan] = FSOUND_PlaySoundEx(FSOUND_FREE, sptr, dsp, startpaused);
+			channels[chan] = OPENAL_PlaySoundEx(OPENAL_FREE, sptr, dsp, startpaused);
 		}
 	}
 
-	extern "C" void PlayStreamEx(int chan, FSOUND_STREAM *sptr, FSOUND_DSPUNIT *dsp, signed char startpaused)
+	extern "C" void PlayStreamEx(int chan, OPENAL_STREAM *sptr, OPENAL_DSPUNIT *dsp, signed char startpaused)
 	{
-		const FSOUND_SAMPLE * currSample = FSOUND_GetCurrentSample(channels[chan]);
-		if (currSample && currSample == FSOUND_Stream_GetSample(sptr))
+		const OPENAL_SAMPLE * currSample = OPENAL_GetCurrentSample(channels[chan]);
+		if (currSample && currSample == OPENAL_Stream_GetSample(sptr))
 		{
-				FSOUND_StopSound(channels[chan]);
-				FSOUND_Stream_Stop(sptr);
+				OPENAL_StopSound(channels[chan]);
+				OPENAL_Stream_Stop(sptr);
 		}
 		else
 		{
-			FSOUND_Stream_Stop(sptr);
-			channels[chan] = FSOUND_FREE;
+			OPENAL_Stream_Stop(sptr);
+			channels[chan] = OPENAL_FREE;
 		}
 
-		channels[chan] = FSOUND_Stream_PlayEx(channels[chan], sptr, dsp, startpaused);
+		channels[chan] = OPENAL_Stream_PlayEx(channels[chan], sptr, dsp, startpaused);
 		if (channels[chan] < 0)
 		{
-			channels[chan] = FSOUND_Stream_PlayEx(FSOUND_FREE, sptr, dsp, startpaused);
+			channels[chan] = OPENAL_Stream_PlayEx(OPENAL_FREE, sptr, dsp, startpaused);
 		}
 	}
+
 
 	bool LoadImage(const char * fname, TGAImageRec & tex)
 	{
@@ -2483,105 +1516,30 @@ int main(int argc, char **argv)
 			return false;
 		}
 
-        #if USE_DEVIL
-		ILstring f = strdup(ConvertFileName(fname));
-		if (!f)
-		{
-			return false;
-		}
-
-		ILuint iid=0;
-		ilGenImages(1, &iid);
-		ilBindImage(iid);
-		if (ilLoadImage(f))
-		{
-			//iluFlipImage();
-			tex.sizeX = ilGetInteger(IL_IMAGE_WIDTH);
-			tex.sizeY = ilGetInteger(IL_IMAGE_HEIGHT);
-			tex.bpp = ilGetInteger(IL_IMAGE_BITS_PER_PIXEL);
-			ILuint Bpp = ilGetInteger(IL_IMAGE_BYTES_PER_PIXEL),
-				imageSize = tex.sizeX * tex.sizeY * Bpp;
-			ILubyte *Data = ilGetData();
-			memcpy(tex.data, Data, imageSize);
-
-			// Truvision Targa files are stored as BGR colors
-			// We want RGB so Blue and Red bytes are switched
-			if (IL_TGA == ilGetInteger(IL_IMAGE_FORMAT))
-			{
-				// Loop Through The Image Data
-				for (GLuint i = 0; i < int(imageSize); i += Bpp)
-				{
-					// Swaps The 1st And 3rd Bytes ('R'ed and 'B'lue)
-					GLbyte temp;						// Temporary Variable
-					temp = tex.data[i];					// Temporarily Store The Value At Image Data 'i'
-					tex.data[i] = tex.data[i + 2];		// Set The 1st Byte To The Value Of The 3rd Byte
-					tex.data[i + 2] = temp;				// Set The 3rd Byte To The Value In 'temp' (1st Byte Value)
-				}
-			}
-		}
-		else
-		{
-			res = false;
-		}
-		ilDeleteImages(1, &iid);
-/*
-		if (tid)
-		{
-			GLuint texid = ilutGLLoadImage(f);
-			*tid = texid;
-		}
-		else if (mip)
-		{
-			ilutGLBuildMipmaps()
-		}
-		else
-		{
-			ilutGLTexImage(0);
-		}
-*/
-		free(f);
-        #else
+       
         res = load_image(fname, tex);
-        //if (!res) printf("failed to load %s\n", fname);
-        #endif
+    
 
 		return res;
 	}
 
 	void ScreenShot(const char * fname)
 	{
-        #if USE_DEVIL
-		ILstring f = strdup(fname);
-		if (!f)
-		{
-			return;
-		}
-
-		ILuint iid;
-		ilGenImages(1, &iid);
-		ilBindImage(iid);
-		if (ilutGLScreen())
-		{
-			ilSaveImage(f);
-		}
-		ilDeleteImages(1, &iid);
-
-		free(f);
-        #else
+  
         save_image(fname);
-        #endif
+  
 	}
 
 
-#if !USE_DEVIL
+
 static bool load_image(const char *file_name, TGAImageRec &tex)
 {
-    char *ptr = strrchr(file_name, '.');
+    const char *ptr = strrchr((char *)file_name, '.');
     if (ptr)
     {
-        if (stricmp(ptr+1, "png") == 0)
+        if (strcasecmp(ptr+1, "png") == 0)
             return load_png(file_name, tex);
-        else if (stricmp(ptr+1, "jpg") == 0)
+        else if (strcasecmp(ptr+1, "jpg") == 0)
             return load_jpg(file_name, tex);
     }
 
@@ -2681,7 +1639,7 @@ static bool load_png(const char *file_name, TGAImageRec &tex)
     png_init_io(png_ptr, fp);
     png_read_png(png_ptr, info_ptr,
                  PNG_TRANSFORM_STRIP_16 | PNG_TRANSFORM_PACKING,
-                 png_voidp_NULL);
+                 NULL);
     png_get_IHDR(png_ptr, info_ptr, &width, &height,
                  &bit_depth, &color_type, &interlace_type, NULL, NULL);
 
@@ -2731,7 +1689,7 @@ static bool load_png(const char *file_name, TGAImageRec &tex)
     retval = true;
 
 png_done:
-    png_destroy_read_struct(&png_ptr, &info_ptr, png_infopp_NULL);
+    png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
     if (fp)
         fclose(fp);
     return (retval);
@@ -2740,10 +1698,10 @@ png_done:
 
 static bool save_image(const char *file_name)
 {
-    char *ptr = strrchr(file_name, '.');
+    const char *ptr = strrchr((char *)file_name, '.');
     if (ptr)
     {
-        if (stricmp(ptr+1, "png") == 0)
+        if (strcasecmp(ptr+1, "png") == 0)
             return save_png(file_name);
     }
 
@@ -2821,5 +1779,5 @@ save_png_done:
     return retval;
 }
 
-#endif
+
 

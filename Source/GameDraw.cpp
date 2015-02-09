@@ -19,7 +19,8 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
-#include "Game.h"	
+#include "Game.h"
+#include "openal_wrapper.h"
 
 using namespace std;
 
@@ -174,9 +175,9 @@ extern float accountcampaigntime[10];
 
 extern bool gamestarted;
 
-extern FSOUND_SAMPLE	*samp[100];
+extern OPENAL_SAMPLE	*samp[100];
 extern int channels[100];
-extern "C" 	void PlaySoundEx(int channel, FSOUND_SAMPLE *sptr, FSOUND_DSPUNIT *dsp, signed char startpaused);
+extern "C" 	void PlaySoundEx(int channel, OPENAL_SAMPLE *sptr, OPENAL_DSPUNIT *dsp, signed char startpaused);
 
 /*********************> DrawGLScene() <*****/
 long long Game::MD5_string (char *string){
@@ -230,7 +231,6 @@ int Game::DrawGLScene(void)
 	lastcheck+=multiplier;
 
 	glColorMask( 1.0, 1.0, 1.0, 1.0 );
-	if(!registered)debugmode=0;
 
 
 	if(freeze||winfreeze||(mainmenu&&gameon)||(!gameon&&gamestarted)){
@@ -1092,10 +1092,10 @@ int Game::DrawGLScene(void)
 								if(dialogueboxsound[whichdialogue][indialogue]==-2)whichsoundplay=firestartsound;
 								if(dialogueboxsound[whichdialogue][indialogue]==-3)whichsoundplay=consolesuccesssound;
 								if(dialogueboxsound[whichdialogue][indialogue]==-4)whichsoundplay=consolefailsound;
-								PlaySoundEx( whichsoundplay, samp[whichsoundplay], NULL, TRUE);
-								FSOUND_3D_SetAttributes(channels[whichsoundplay], gLoc, vel);
-								FSOUND_SetVolume(channels[whichsoundplay], 256);
-								FSOUND_SetPaused(channels[whichsoundplay], FALSE);
+								PlaySoundEx( whichsoundplay, samp[whichsoundplay], NULL, true);
+								OPENAL_3D_SetAttributes(channels[whichsoundplay], gLoc, vel);
+								OPENAL_SetVolume(channels[whichsoundplay], 256);
+								OPENAL_SetPaused(channels[whichsoundplay], false);
 							}
 						}
 					}
@@ -2239,10 +2239,10 @@ int Game::DrawGLScene(void)
 	}
 
 	if(mainmenu){
-#if USE_SDL
+
         // !!! FIXME: hack: clamp framerate in menu so text input works correctly on fast systems.
         SDL_Delay(15);
-#endif
+
 		glDrawBuffer(GL_BACK);
 		glReadBuffer(GL_BACK);
 		glTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
@@ -2357,7 +2357,7 @@ int Game::DrawGLScene(void)
 
 		/*if(mainmenu!=0)*/oldmainmenu=mainmenu;
 
-		if(mainmenu==3||mainmenu==4||mainmenu==5||mainmenu==6||mainmenu==7||mainmenu==8||mainmenu==9||mainmenu==10||mainmenu==119||mainmenu==12||mainmenu==13||mainmenu==14||mainmenu==15||mainmenu==16||mainmenu==17){
+		if(mainmenu==3||mainmenu==4||mainmenu==5||mainmenu==6||mainmenu==7||mainmenu==8||mainmenu==9||mainmenu==10||mainmenu==119||mainmenu==13||mainmenu==17){
 			glClear(GL_DEPTH_BUFFER_BIT);
 			glEnable(GL_ALPHA_TEST);
 			glAlphaFunc(GL_GREATER, 0.001f);
@@ -2505,7 +2505,7 @@ int Game::DrawGLScene(void)
 				movex[10]=0;
 				movey[10]=0;
 				
-				sprintf (menustring[11], "Volume: %d%", (int)(volume*100));
+				sprintf (menustring[11], "Volume: %d%%", (int)(volume*100));
 				startx[11]=10+60;
 				starty[11]=155;
 				endx[11]=startx[11]+strlen(menustring[11])*10;
@@ -2687,7 +2687,7 @@ int Game::DrawGLScene(void)
 
 				if(accountcampaignchoicesmade[accountactive])
 					for(i=0;i<accountcampaignchoicesmade[accountactive];i++){
-						sprintf (menustring[7+i], campaigndescription[levelorder[i]]);
+						sprintf (menustring[7+i], "%s", campaigndescription[levelorder[i]]);
 						startx[7+i]=30+120+campaignlocationx[levelorder[i]]*400/512;
 						starty[7+i]=30+30+(512-campaignlocationy[levelorder[i]])*400/512;
 						endx[7+i]=startx[7+i]+10;
@@ -2698,7 +2698,7 @@ int Game::DrawGLScene(void)
 
 					if(campaignchoicenum>0)
 						for(i=accountcampaignchoicesmade[accountactive];i<accountcampaignchoicesmade[accountactive]+campaignchoicenum;i++){
-							sprintf (menustring[7+i], campaigndescription[levelorder[i]]);
+							sprintf (menustring[7+i], "%s", campaigndescription[levelorder[i]]);
 							startx[7+i]=30+120+campaignlocationx[campaignchoicewhich[i-(accountcampaignchoicesmade[accountactive])]]*400/512;
 							starty[7+i]=30+30+(512-campaignlocationy[campaignchoicewhich[i-(accountcampaignchoicesmade[accountactive])]])*400/512;
 							endx[7+i]=startx[7+i]+10;
@@ -3057,128 +3057,6 @@ int Game::DrawGLScene(void)
 			}
 		}
 
-		if(mainmenu==12){	
-			menupulse+=multiplier*2;
-
-			nummenuitems=6;
-			char temp[255];
-
-			sprintf (menustring[0], "Register now for only $19.95!");
-			startx[0]=160;
-			starty[0]=270;
-			endx[0]=startx[0]+strlen(menustring[0])*10;
-			endy[0]=starty[0]+20;
-			movex[0]=0;
-			movey[0]=0;
-
-			sprintf (menustring[1], "Confront raiders, wolves, and more!");
-			startx[1]=130;
-			starty[1]=240;
-			endx[1]=startx[1]+strlen(menustring[1])*10;
-			endy[1]=starty[1]+20;
-			movex[1]=0;
-			movey[1]=0;
-
-			sprintf (menustring[2], "Fight using swords, staves and armor!");
-			startx[2]=125;
-			starty[2]=210;
-			endx[2]=startx[2]+strlen(menustring[2])*10;
-			endy[2]=starty[2]+20;
-			movex[2]=0;
-			movey[2]=0;
-
-			if(!tryquit)sprintf (menustring[3], "Back");
-			else sprintf (menustring[3], "Quit");
-			startx[3]=10;
-			endx[3]=startx[3]+strlen(menustring[3])*10;
-			starty[3]=10;
-			endy[3]=starty[3]+20;
-			movex[3]=0;
-			movey[3]=0;
-
-			sprintf (menustring[4], "Register now!");
-			startx[4]=250;
-			endx[4]=startx[4]+strlen(menustring[4])*10;
-			starty[4]=140;
-			endy[4]=starty[4]+20;
-			movex[4]=0;
-			movey[4]=0;
-
-			sprintf (menustring[5], "Enter registration code!");
-			startx[5]=190;
-			endx[5]=startx[5]+strlen(menustring[5])*10;
-			starty[5]=120;
-			endy[5]=starty[5]+20;
-			movex[5]=0;
-			movey[5]=0;
-		}
-
-		if(mainmenu==15){	
-			nummenuitems=2;
-			char temp[255];
-
-			sprintf (menustring[0], "Thank you for supporting Wolfire Software!");
-			startx[0]=100;
-			starty[0]=270;
-			endx[0]=startx[0]+strlen(menustring[0])*10;
-			endy[0]=starty[0]+20;
-			movex[0]=0;
-			movey[0]=0;
-
-			sprintf (menustring[1], "Back");
-			startx[1]=10;
-			endx[1]=startx[1]+strlen(menustring[1])*10;
-			starty[1]=10;
-			endy[1]=starty[1]+20;
-			movex[1]=0;
-			movey[1]=0;
-		}
-
-		if(mainmenu==16){	
-			nummenuitems=5;
-			char temp[255];
-
-			sprintf (menustring[0], "Sorry, that name/serial number combination is incorrect.");
-			startx[0]=40;
-			starty[0]=270;
-			endx[0]=startx[0]+strlen(menustring[0])*10;
-			endy[0]=starty[0]+20;
-			movex[0]=0;
-			movey[0]=0;
-
-			sprintf (menustring[1], "Back");
-			startx[1]=10;
-			endx[1]=startx[1]+strlen(menustring[1])*10;
-			starty[1]=10;
-			endy[1]=starty[1]+20;
-			movex[1]=0;
-			movey[1]=0;
-
-			sprintf (menustring[2], "Please make sure you are copying your name and serial");
-			startx[2]=50;
-			starty[2]=240;
-			endx[2]=startx[2]+strlen(menustring[2])*10;
-			endy[2]=starty[2]+20;
-			movex[2]=0;
-			movey[2]=0;
-
-			sprintf (menustring[3], "number exactly as they appear in your email.");
-			startx[3]=90;
-			starty[3]=210;
-			endx[3]=startx[3]+strlen(menustring[3])*10;
-			endy[3]=starty[3]+20;
-			movex[3]=0;
-			movey[3]=0;
-
-			sprintf (menustring[4], "Capitalization and punctuation matter!");
-			startx[4]=120;
-			starty[4]=180;
-			endx[4]=startx[4]+strlen(menustring[4])*10;
-			endy[4]=starty[4]+20;
-			movex[4]=0;
-			movey[4]=0;
-		}
-
 		if(mainmenu==13){	
 			nummenuitems=2;
 			char temp[255];
@@ -3199,49 +3077,6 @@ int Game::DrawGLScene(void)
 			movex[1]=0;
 			movey[1]=0;
 		}
-
-		if(mainmenu==14){	
-			nummenuitems=2;
-			char temp[255];
-
-			sprintf (menustring[0], "Please enter your number:");
-			startx[0]=30;
-			starty[0]=250;
-			endx[0]=startx[0]+strlen(menustring[0])*10;
-			endy[0]=starty[0]+20;
-			movex[0]=0;
-			movey[0]=0;
-
-			sprintf (menustring[1], "Please enter your name:");
-			startx[1]=290;
-			starty[1]=250;
-			endx[1]=startx[1]+strlen(menustring[1])*10;
-			endy[1]=starty[1]+20;
-			movex[1]=0;
-			movey[1]=0;
-			/*
-			char tempstring[256];
-			sprintf (tempstring, "%s", registrationname);
-			long num1;
-			long num2;
-			long num3;
-			long num4;
-			long long longnum;
-			longnum = MD5_string ( tempstring);
-			//longnum = 1111111111111111;
-			num1 = longnum/100000000;
-			num2 = longnum%100000000;
-			sprintf (tempstring, "%d-%d-%d-%d", num1/10000, num1%10000, num2/10000, num2%10000);
-
-			sprintf (menustring[2], "%s", tempstring);
-			startx[2]=290;
-			starty[2]=230;
-			endx[2]=startx[2]+strlen(menustring[2])*10;
-			endy[2]=starty[2]+20;
-			movex[2]=0;
-			movey[2]=0;				*/	
-		}
-
 		if(mainmenu==1||mainmenu==2){
 			nummenuitems=7;
 			startx[0]=150;
@@ -3409,7 +3244,7 @@ int Game::DrawGLScene(void)
 				}
 			}
 
-			if(mainmenu==3||mainmenu==4||mainmenu==5||mainmenu==6||mainmenu==7||mainmenu==8||mainmenu==9||mainmenu==10||mainmenu==11||mainmenu==12||mainmenu==13||mainmenu==14||mainmenu==15||mainmenu==16||mainmenu==17)
+			if(mainmenu==3||mainmenu==4||mainmenu==5||mainmenu==6||mainmenu==7||mainmenu==8||mainmenu==9||mainmenu==10||mainmenu==11||mainmenu==13||mainmenu==17)
 				for(i=0;i<nummenuitems;i++){
 					if((mousecoordh/screenwidth*640)>startx[i]&&(mousecoordh/screenwidth*640)<endx[i]&&480-(mousecoordv/screenheight*480)>starty[i]&&480-(mousecoordv/screenheight*480)<endy[i]){
 						if(mainmenu!=5)selected=i;
@@ -3602,18 +3437,17 @@ int Game::DrawGLScene(void)
 											}
 										}
 									}
-									if(mainmenu==3||mainmenu==4||mainmenu==5||mainmenu==6||mainmenu==7||mainmenu==8||mainmenu==9||mainmenu==10||mainmenu==11||mainmenu==12||mainmenu==13||mainmenu==14||mainmenu==15||mainmenu==16||mainmenu==17)
+									if(mainmenu==3||mainmenu==4||mainmenu==5||mainmenu==6||mainmenu==7||mainmenu==8||mainmenu==9||mainmenu==10||mainmenu==11||mainmenu==13||mainmenu==17)
 									{
 										if(mainmenu!=5||j<6)
 										{
 											glColor4f(1,0,0,1);
-											if(mainmenu==12&&j==4)glColor4f(1,(sin(menupulse)+1)/2,(sin(menupulse)+1)/2,1);
 											if(mainmenu==9&&j>accountprogress[accountactive]&&j<numchallengelevels)glColor4f(0.5,0,0,1);
 											if(mainmenu==11&&j>accountprogress[accountactive]&&j<numchallengelevels)glColor4f(0.5,0,0,1);
 											//if(1-((float)i)/10-(1-selectedlong[j])>0){
 											glMatrixMode(GL_MODELVIEW);							// Select The Modelview Matrix
 											glPushMatrix();
-												if((mainmenu!=7||j!=0||!entername)&&(mainmenu!=13||j!=1)&&(mainmenu!=14||j!=1))text.glPrint(startx[j],starty[j],menustring[j],0,1,640,480);
+												if(mainmenu!=7||j!=0||!entername)text.glPrint(startx[j],starty[j],menustring[j],0,1,640,480);
 												else
 												{
 													if(displayblink){
@@ -3643,7 +3477,6 @@ int Game::DrawGLScene(void)
 												if(1-((float)i)/15-(1-selectedlong[j])>0)
 												{
 													glColor4f(1,0,0,(1-((float)i)/10-(1-selectedlong[j]))*.25);
-													if(mainmenu==12&&j==4)glColor4f(1,(sin(menupulse)+1)/2,(sin(menupulse)+1)/2,(1-((float)i)/10-(1-selectedlong[j]))*.25);
 													if(mainmenu==9&&j>accountprogress[accountactive]&&j<numchallengelevels)glColor4f(0.5,0,0,(1-((float)i)/10-(1-selectedlong[j]))*.25);
 													if(mainmenu==11&&j>accountprogress[accountactive]&&j<numchallengelevels)glColor4f(0.5,0,0,(1-((float)i)/10-(1-selectedlong[j]))*.25);
 													if(mainmenu==3)text.glPrint(startx[j]-((float)i)+offsetx[j]*((float)i)/4-((/*1*/+((float)i)/70)*strlen(menustring[j]))*3,starty[j]/*-i*1/2*/+offsety[j]*((float)i)/4,menustring[j],0,1+((float)i)/70,640,480);
@@ -3655,12 +3488,8 @@ int Game::DrawGLScene(void)
 													if(mainmenu==9)text.glPrint(startx[j]-((float)i)+offsetx[j]*((float)i)/4/*-((((float)i)/70)*strlen(menustring[j]))*3*/,starty[j]/*-i*1/2*/+offsety[j]*((float)i)/4,menustring[j],0,1+((float)i)/70,640,480);
 													if(mainmenu==11)text.glPrint(startx[j]-((float)i)+offsetx[j]*((float)i)/4/*-((((float)i)/70)*strlen(menustring[j]))*3*/,starty[j]/*-i*1/2*/+offsety[j]*((float)i)/4,menustring[j],0,1+((float)i)/70,640,480);
 													if(mainmenu==10)text.glPrint(startx[j]-((float)i)+offsetx[j]*((float)i)/4/*-((((float)i)/70)*strlen(menustring[j]))*3*/,starty[j]/*-i*1/2*/+offsety[j]*((float)i)/4,menustring[j],0,1+((float)i)/70,640,480);
-													if(mainmenu==12)text.glPrint(startx[j]-((float)i)+offsetx[j]*((float)i)/4/*-((((float)i)/70)*strlen(menustring[j]))*3*/,starty[j]/*-i*1/2*/+offsety[j]*((float)i)/4,menustring[j],0,1+((float)i)/70,640,480);
-													if(mainmenu==15)text.glPrint(startx[j]-((float)i)+offsetx[j]*((float)i)/4/*-((((float)i)/70)*strlen(menustring[j]))*3*/,starty[j]/*-i*1/2*/+offsety[j]*((float)i)/4,menustring[j],0,1+((float)i)/70,640,480);
-													if(mainmenu==16)text.glPrint(startx[j]-((float)i)+offsetx[j]*((float)i)/4/*-((((float)i)/70)*strlen(menustring[j]))*3*/,starty[j]/*-i*1/2*/+offsety[j]*((float)i)/4,menustring[j],0,1+((float)i)/70,640,480);
 													if(mainmenu==17)text.glPrint(startx[j]-((float)i)+offsetx[j]*((float)i)/4/*-((((float)i)/70)*strlen(menustring[j]))*3*/,starty[j]/*-i*1/2*/+offsety[j]*((float)i)/4,menustring[j],0,1+((float)i)/70,640,480);
 													if(mainmenu==13&&j!=1)text.glPrint(startx[j]-((float)i)+offsetx[j]*((float)i)/4/*-((((float)i)/70)*strlen(menustring[j]))*3*/,starty[j]/*-i*1/2*/+offsety[j]*((float)i)/4,menustring[j],0,1+((float)i)/70,640,480);
-													if(mainmenu==14&&j!=1)text.glPrint(startx[j]-((float)i)+offsetx[j]*((float)i)/4/*-((((float)i)/70)*strlen(menustring[j]))*3*/,starty[j]/*-i*1/2*/+offsety[j]*((float)i)/4,menustring[j],0,1+((float)i)/70,640,480);
 													/*else{
 													if(displayblink){
 													sprintf (string, "_");
@@ -3965,15 +3794,9 @@ int Game::DrawGLScene(void)
 
 	//glFlush();
 	if(drawmode!=motionblurmode||mainmenu){
-        #if !USE_SDL
-        // this prevents menus from rendering if you hit ESC during
-        //  motion blur sequences...maybe SDL is buffering differently?
-		if(drawmode!=motionblurmode)
-			swap_gl_buffers();
-        #else
+
 		swap_gl_buffers();
-        #endif
-	}
+  }
 
 	//myassert(glGetError() == GL_NO_ERROR);
 	glDrawBuffer(GL_BACK);
